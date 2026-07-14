@@ -1,0 +1,37 @@
+# ============================================
+# DATOS — nunca subir datos de Ceibal a GitHub
+# ============================================
+data/raw/*
+data/interim/*
+data/processed/*
+data/ejemplo/*
+data/aggregated/*
+!data/**/.gitkeep
+
+# ============================================
+# SECRETOS
+# ============================================
+.env
+*.key
+credentials*
+
+# ============================================
+# PYTHON
+# ============================================
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ============================================
+# MAC / EDITOR
+# ============================================
+.DS_Store
+.vscode/
+.idea/
+
+# ============================================
+# POWER BI (puede llevar datos embebidos)
+# ============================================
+dashboards/*.pbix

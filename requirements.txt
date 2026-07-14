@@ -1,0 +1,17 @@
+# Análisis de datos
+pandas>=2.2,<3.0
+numpy>=1.26
+
+# Visualización
+matplotlib>=3.8
+seaborn>=0.13
+
+# Notebooks
+jupyter>=1.0
+ipykernel>=6.29
+
+# Lectura de Excel (por si Ceibal entrega .xlsx)
+openpyxl>=3.1
+
+# Tests
+pytest>=8.0pyarrow>=15.0
