@@ -31,6 +31,11 @@ Contexto y segmentación:
 ¿Existen diferencias según sexo?
 
 -Estructura:
+├── scripts/       # scripts de procesamiento y auditoría
+├── src/           # código fuente reutilizable
+├── data/          # datos (no versionados por privacidad)
+├── reports/       # hallazgos y auditorías
+└── dashboards/    # visualizaciones
 
 -Autores:
 Domingo Leiva 
