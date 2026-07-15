@@ -28,7 +28,16 @@ import pandas as pd
 
 CARPETA = Path("data/interim/entrega-02-corregida")
 
+# Carpeta donde vamos a guardar todas las tablas calculadas, en CSV,
+# para que el dashboard (generar_dashboard.py) las pueda leer sin
+# tener que recalcular nada.
+OUT = Path("data/processed/metricas")
+
 MESES = {"Dias4": "abril", "Dias5": "mayo", "Dias6": "junio"}
+
+# Dimensiones por las que además del panorama general y por rubro,
+# queremos desglosar (si la columna existe en los datos).
+DIMENSIONES_EXTRA = ["sexo", "ciclo", "zona", "tipo_centro", "dept_nombre"]
 
 # DECISIÓN (documentar en decisiones.md):
 # "usuario que accedió" = al menos 1 día de acceso en el trimestre.
@@ -43,6 +52,14 @@ def norm(v) -> str:
     s = str(v).strip().lower()
     s = unicodedata.normalize("NFKD", s)
     return "".join(c for c in s if not unicodedata.combining(c))
+
+
+def guardar(df: pd.DataFrame, nombre: str) -> None:
+    """Guarda un DataFrame en data/processed/metricas/<nombre>.csv"""
+    OUT.mkdir(parents=True, exist_ok=True)
+    ruta = OUT / f"{nombre}.csv"
+    df.to_csv(ruta, index=False)
+    print(f"  -> guardado {ruta}")
 
 
 def preparar(df: pd.DataFrame, poblacion: str, anio: int) -> pd.DataFrame:
@@ -110,6 +127,29 @@ def comparar(df, dimension=None):
                 "tasa_%_2025", "tasa_%_2026", "var_tasa_pp"]]
 
 
+def mensual_por(df, dimension):
+    """Evolución mensual de la tasa de acceso, desglosada por una dimensión.
+    Pensado para armar heatmaps (dimensión x mes) en el dashboard."""
+    filas = []
+    for col, mes in MESES.items():
+        c = norm(col)
+        tmp = df.copy()
+        tmp["accedio_mes"] = tmp[c] >= UMBRAL
+        g = tmp.groupby(["poblacion", "anio", dimension], dropna=False).agg(
+            n=("accedio_mes", "size"), acc=("accedio_mes", "sum")
+        ).reset_index()
+        g["mes"] = mes
+        g["tasa_%"] = (100 * g["acc"] / g["n"]).round(1)
+        filas.append(g)
+    mensual = pd.concat(filas, ignore_index=True)
+
+    piv = mensual.pivot_table(index=["poblacion", dimension, "mes"],
+                               columns="anio", values="tasa_%").reset_index()
+    piv = piv.rename(columns={2025: "tasa_%_2025", 2026: "tasa_%_2026"})
+    piv["var_tasa_pp"] = (piv["tasa_%_2026"] - piv["tasa_%_2025"]).round(1)
+    return piv
+
+
 def main():
     pd.set_option("display.width", 200)
 
@@ -120,11 +160,15 @@ def main():
         partes.append(preparar(pd.read_parquet(ruta), poblacion, int(anio)))
     df = pd.concat(partes, ignore_index=True)
 
+    dims_presentes = [d for d in DIMENSIONES_EXTRA if d in df.columns]
+    print(f"\nDimensiones extra encontradas en los datos: {dims_presentes}")
+
     # ============================================================
     print("\n" + "=" * 78)
     print("1. LA PREGUNTA CENTRAL: ¿menos gente, o menos uso?")
     print("=" * 78)
-    print(comparar(df).to_string(index=False))
+    general = comparar(df)
+    print(general.to_string(index=False))
     print("""
   CÓMO LEERLO:
     var_registrados_% -> cambió la cantidad de gente en la base (denominador)
@@ -133,16 +177,29 @@ def main():
     Si var_tasa_pp ~ 0  -> la caída es de POBLACIÓN, no de uso.
     Si var_tasa_pp < 0  -> la gente que está, entra menos. Eso sí es CREA.
     """)
+    guardar(general, "comparar_general")
 
     # ============================================================
     print("\n" + "=" * 78)
     print("2. POR SUBSISTEMA (Rubro)   DGEIP=Primaria DGES=Secundaria DGETP=UTU")
     print("=" * 78)
-    print(comparar(df, "rubro").to_string(index=False))
+    rubro = comparar(df, "rubro")
+    print(rubro.to_string(index=False))
+    guardar(rubro, "comparar_rubro")
 
     # ============================================================
     print("\n" + "=" * 78)
-    print("3. EVOLUCIÓN MES A MES (¿la caída se concentra en algún mes?)")
+    print("3. OTRAS DIMENSIONES (sexo, ciclo, zona, tipo de centro, departamento)")
+    print("=" * 78)
+    for dim in dims_presentes:
+        tabla = comparar(df, dim)
+        print(f"\n--- por {dim} ---")
+        print(tabla.to_string(index=False))
+        guardar(tabla, f"comparar_{dim}")
+
+    # ============================================================
+    print("\n" + "=" * 78)
+    print("4. EVOLUCIÓN MES A MES (¿la caída se concentra en algún mes?)")
     print("=" * 78)
     filas = []
     for col, mes in MESES.items():
@@ -155,23 +212,37 @@ def main():
         g["mes"] = mes
         g["tasa_%"] = (100 * g["acc"] / g["n"]).round(1)
         filas.append(g)
-    mensual = pd.concat(filas)
+    mensual = pd.concat(filas, ignore_index=True)
     print(mensual.pivot_table(index=["poblacion", "mes"], columns="anio",
                               values="tasa_%").to_string())
+    guardar(mensual, "evolucion_mensual")
+
+    # Heatmaps: evolución mensual desglosada por departamento y por rubro
+    if "dept_nombre" in df.columns:
+        guardar(mensual_por(df, "dept_nombre"), "mensual_por_dept_nombre")
+    guardar(mensual_por(df, "rubro"), "mensual_por_rubro")
 
     # ============================================================
     print("\n" + "=" * 78)
-    print("4. ¿LA CONCLUSIÓN DEPENDE DEL UMBRAL? (robustez)")
+    print("5. ¿LA CONCLUSIÓN DEPENDE DEL UMBRAL? (robustez)")
     print("=" * 78)
     print("Si con 1, 5 y 10 días la conclusión es la misma, es una conclusión sólida.\n")
+    robustez_filas = []
     for u in [1, 5, 10]:
         tmp = df.copy()
         tmp["accedio"] = tmp["dias_total"] >= u
         t = tasa(tmp, ["poblacion", "anio"])
         p = t.pivot_table(index="poblacion", columns="anio", values="tasa_%")
         p["var_pp"] = (p[2026] - p[2025]).round(1)
+        p = p.reset_index()
+        p["umbral"] = u
+        robustez_filas.append(p)
         print(f"--- umbral >= {u} día(s) ---")
         print(p.to_string(), "\n")
+    robustez = pd.concat(robustez_filas, ignore_index=True)
+    guardar(robustez, "robustez_umbral")
+
+    print("\nListo. Todas las tablas quedaron guardadas en:", OUT.resolve())
 
 
 if __name__ == "__main__":
