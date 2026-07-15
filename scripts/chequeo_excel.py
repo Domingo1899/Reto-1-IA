@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 
-CARPETA = Path("data/raw/entrega-01-original")
+CARPETA = Path("data/raw/entrega-02-corregida")
 
 
 def identificar(nombre: str) -> tuple[str | None, int | None]:
@@ -29,9 +29,9 @@ def identificar(nombre: str) -> tuple[str | None, int | None]:
     """
     n = nombre.lower()
 
-    if "docent" in n:
+    if "doc" in n:
         poblacion = "docentes"
-    elif "estudiant" in n or "alumn" in n:
+    elif "estu" in n or "alumn" in n:
         poblacion = "estudiantes"
     else:
         poblacion = None
@@ -94,8 +94,8 @@ def main():
             print("  !! Falta el archivo de 2025 o de 2026: no puedo comparar.")
             continue
 
-        cols25 = set(d25["hojas"].get("Datos", []))
-        cols26 = set(d26["hojas"].get("Datos", []))
+        cols25 = set(next(iter(d25["hojas"].values())))
+        cols26 = set(next(iter(d26["hojas"].values())))
 
         solo25 = sorted(cols25 - cols26)
         solo26 = sorted(cols26 - cols25)

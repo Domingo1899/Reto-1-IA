@@ -21,13 +21,13 @@ from pathlib import Path
 
 import pandas as pd
 
-ORIGEN = Path("data/raw/entrega-01-original")
-DESTINO = Path("data/interim/entrega-01-original")
+ORIGEN = Path("data/raw/entrega-02-corregida")
+DESTINO = Path("data/interim/entrega-02-corregida")
 
 
 def identificar(nombre: str):
     n = nombre.lower()
-    poblacion = "docentes" if "docent" in n else ("estudiantes" if "estudiant" in n else None)
+    poblacion = "docentes" if "doc" in n else ("estudiantes" if "estu" in n else None)
     m = re.search(r"20\d{2}", n)
     return poblacion, (int(m.group()) if m else None)
 
@@ -47,7 +47,7 @@ def main():
             continue
 
         t0 = time.time()
-        df = pd.read_excel(ruta, sheet_name="Datos", dtype=str)
+        df = pd.read_excel(ruta, sheet_name="Sheet 1", dtype=str)
 
         # nombre estandarizado: acá SÍ imponemos la convención, en la copia,
         # nunca en el original

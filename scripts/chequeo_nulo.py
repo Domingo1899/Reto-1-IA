@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 
-CARPETA = Path("data/interim/entrega-01-original")
+CARPETA = Path("data/interim/entrega-02-corregida")
 
 # Textos que significan "vacío" aunque pandas los lea como texto común
 NULOS_DISFRAZADOS = {

@@ -18,12 +18,12 @@ from pathlib import Path
 
 import pandas as pd
 
-CARPETA = Path("data/raw/entrega-01-original")
+CARPETA = Path("data/raw/entrega-02-corregida")
 
 
 def identificar(nombre: str):
     n = nombre.lower()
-    poblacion = "docentes" if "docent" in n else ("estudiantes" if "estudiant" in n else None)
+    poblacion = "docentes" if "doc" in n else ("estudiantes" if "estu" in n else None)
     m = re.search(r"20\d{2}", n)
     return poblacion, (int(m.group()) if m else None)
 
@@ -33,7 +33,7 @@ def cargar(ruta: Path) -> pd.DataFrame:
     # dtype=str: los ID se leen como TEXTO. Si dejamos que pandas los lea como
     # número, un ID '000123' se convierte en 123 y perdemos los ceros -> los IDs
     # dejan de matchear y creeríamos que no son estables cuando sí lo son.
-    df = pd.read_excel(ruta, sheet_name="Datos", dtype=str)
+    df = pd.read_excel(ruta, sheet_name=0, dtype=str)
     return df
 
 

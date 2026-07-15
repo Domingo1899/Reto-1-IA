@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pandas as pd
 
-CARPETA = Path("data/interim/entrega-01-original")
+CARPETA = Path("data/interim/entrega-02-corregida")
 
 MESES = {"Dias4": "abril", "Dias5": "mayo", "Dias6": "junio"}
 

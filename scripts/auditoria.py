@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-CARPETA = Path("data/interim/entrega-01-original")
+CARPETA = Path("data/interim/entrega-02-corregida") ## la carpeta de la cual lee, es el cambio que hicimos para leer los datos neuvos 
 SALIDA = Path("reports/auditoria")
 
 # ---------------------------------------------------------------- LAS REGLAS
