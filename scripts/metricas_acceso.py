@@ -51,6 +51,51 @@ DIMENSIONES_EXTRA = ["sexo", "ciclo", "zona", "tipo_centro", "dept_nombre"]
 # Más abajo probamos también otros umbrales, para ver si la conclusión cambia.
 UMBRAL = 1
  
+# DECISIÓN (consultada con el profe): analizar por 2 bloques de la reforma
+#   - EBI  (Educación Básica Integrada): Inicial 3-5 años + Primaria 1º-6º
+#          + Ciclo Básico 7º-9º
+#   - EMS  (Educación Media Superior): Bachillerato 1º-3º
+# Los valores de abajo son los que aparecen REALMENTE en la columna "ciclo"
+# de docentes/estudiantes 2025/2026 (ya en minúsculas y sin tildes, como
+# los deja norm()). Categorías que no encajan claramente en ninguno de los
+# dos bloques (4to. ciclo, educación media rural, FPB, CTT, educación media
+# profesional, etc.) quedan FUERA a propósito -> ciclo_a_bloque() devuelve
+# None para ellas, y esos registros se excluyen del análisis por bloque
+# (no se fuerzan a un bloque para no ensuciar el análisis).
+EBI_VALORES = {
+    "primaria",
+    "primaria especial",
+    "primaria especial - disc. auditiva",
+    "educacion basica integrada",
+    "3er. ciclo ebi",
+    "ciclo basico",
+    "ciclo basico tecnologico",
+    "articulacion educacion media basica",
+    "educacion media basica tecnologica",
+}
+ 
+EMS_VALORES = {
+    "bachillerato",
+    "bachillerato figari",
+    "bachillerato profesional",
+    "bachillerato profesional trayectos",
+    "bachillerato tecnico profesional",
+    "bachillerato tecnologico",
+    "educacion media superior",
+    "educacion media tecnologica",
+    "educacion media tecnologica finest",
+}
+ 
+ 
+def ciclo_a_bloque(ciclo_norm: str):
+    """Devuelve 'ebi', 'ems', o None si el ciclo no fue clasificado
+    (categoría dudosa que decidimos dejar fuera del análisis por bloque)."""
+    if ciclo_norm in EBI_VALORES:
+        return "ebi"
+    if ciclo_norm in EMS_VALORES:
+        return "ems"
+    return None
+ 
  
 def norm(v) -> str:
     if pd.isna(v):
@@ -79,6 +124,12 @@ def preparar(df: pd.DataFrame, poblacion: str, anio: int) -> pd.DataFrame:
     for col in ["zona", "tipo_centro", "rubro", "dept_nombre", "ciclo", "sexo"]:
         if col in df.columns:
             df[col] = df[col].map(norm)
+ 
+    # 2b. Bloque EBI/EMS a partir de "ciclo" (ya normalizado arriba).
+    #     Las categorías dudosas quedan en None -> se filtran antes de
+    #     armar la tabla por bloque (ver main()).
+    if "ciclo" in df.columns:
+        df["bloque"] = df["ciclo"].map(ciclo_a_bloque)
  
     # 3. QUITAR DUPLICADOS EXACTOS
     #    Encontramos 6.449 en docentes 2025 y solo 641 en 2026. Si no los
@@ -240,6 +291,21 @@ def main():
         print(f"\n--- por {dim} ---")
         print(tabla.to_string(index=False))
         guardar(tabla, f"comparar_{dim}")
+ 
+    # ============================================================
+    print("\n" + "=" * 78)
+    print("3b. POR BLOQUE (EBI vs EMS, post-reforma)")
+    print("=" * 78)
+    if "bloque" in df.columns:
+        df_bloque = df[df["bloque"].notna()]
+        excluidas = len(df) - len(df_bloque)
+        print(f"(se excluyen {excluidas:,} registros con ciclo no clasificado "
+              f"en EBI/EMS -> {100*excluidas/len(df):.1f}% del total)")
+        bloque = comparar(df_bloque, "bloque")
+        print(bloque.to_string(index=False))
+        guardar(bloque, "comparar_bloque")
+    else:
+        print("No se encontró la columna 'ciclo', se salta este bloque.")
  
     # ============================================================
     print("\n" + "=" * 78)
