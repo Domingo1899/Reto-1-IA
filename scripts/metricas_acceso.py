@@ -106,11 +106,25 @@ def norm(v) -> str:
  
  
 def guardar(df: pd.DataFrame, nombre: str) -> None:
-    """Guarda un DataFrame en data/processed/metricas/<nombre>.csv"""
+    """Guarda un DataFrame en data/processed/metricas/<nombre>.csv
+
+    Si el DataFrame tiene columna "poblacion" (estudiantes/docentes
+    mezclados en las mismas filas), lo parte en un CSV por población
+    en vez de guardar una tabla mixta. Esto es a propósito: en Power BI
+    cada tabla debe representar UNA entidad (o estudiantes, o docentes),
+    no las dos pisándose en las mismas filas.
+    """
     OUT.mkdir(parents=True, exist_ok=True)
-    ruta = OUT / f"{nombre}.csv"
-    df.to_csv(ruta, index=False)
-    print(f"  -> guardado {ruta}")
+    if "poblacion" in df.columns:
+        for pob, sub in df.groupby("poblacion"):
+            sub = sub.drop(columns=["poblacion"])
+            ruta = OUT / f"{nombre}_{pob}.csv"
+            sub.to_csv(ruta, index=False)
+            print(f"  -> guardado {ruta}")
+    else:
+        ruta = OUT / f"{nombre}.csv"
+        df.to_csv(ruta, index=False)
+        print(f"  -> guardado {ruta}")
  
  
 def preparar(df: pd.DataFrame, poblacion: str, anio: int) -> pd.DataFrame:
