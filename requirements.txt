@@ -5,6 +5,7 @@ numpy>=1.26
 # Visualización
 matplotlib>=3.8
 seaborn>=0.13
+plotly>=5.20
 
 # Notebooks
 jupyter>=1.0
