@@ -119,11 +119,11 @@ def guardar(df: pd.DataFrame, nombre: str) -> None:
         for pob, sub in df.groupby("poblacion"):
             sub = sub.drop(columns=["poblacion"])
             ruta = OUT / f"{nombre}_{pob}.csv"
-            sub.to_csv(ruta, index=False)
+            sub.to_csv(ruta, index=False, sep=";", decimal=",")
             print(f"  -> guardado {ruta}")
     else:
         ruta = OUT / f"{nombre}.csv"
-        df.to_csv(ruta, index=False)
+        df.to_csv(ruta, index=False, sep=";", decimal=",")
         print(f"  -> guardado {ruta}")
  
  
@@ -335,7 +335,7 @@ def main():
         ).reset_index()
         g["mes"] = mes
         g["tasa_%"] = (100 * g["acc"] / g["n"]).round(1)
-        filas.append(g)
+        filas.append(g) 
     mensual = pd.concat(filas, ignore_index=True)
     print(mensual.pivot_table(index=["poblacion", "mes"], columns="anio",
                               values="tasa_%").to_string())
@@ -360,6 +360,9 @@ def main():
                            values=["n_registrados", "n_accedieron", "tasa_%"])
         p.columns = [f"{a}_{b}" for a, b in p.columns]
         p["var_pp"] = (p["tasa_%_2026"] - p["tasa_%_2025"]).round(1)
+        for c in ("n_registrados_2025", "n_registrados_2026",
+                  "n_accedieron_2025", "n_accedieron_2026"):
+            p[c] = p[c].fillna(0).astype(int)
         p = p.reset_index()
         p["umbral"] = u
         robustez_filas.append(p)

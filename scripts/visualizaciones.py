@@ -274,7 +274,7 @@ def seccion_mapa():
     # mapa norm(NAME_1) -> NAME_1, para traducir nuestros dept_nombre al del GeoJSON
     a_geo = {norm(f["properties"]["NAME_1"]): f["properties"]["NAME_1"] for f in geo["features"]}
 
-    d = pd.read_csv(METRICAS / "comparar_dept_nombre_estudiantes.csv")
+    d = pd.read_csv(METRICAS / "comparar_dept_nombre_estudiantes.csv", sep=";", decimal=",")
     d["depto"] = d["dept_nombre"].map(a_geo)
 
     lim = max(abs(d["var_tasa_pp"].min()), abs(d["var_tasa_pp"].max()))
@@ -298,6 +298,145 @@ def seccion_mapa():
         "Esta vista país-level es el puente hacia el último paso del análisis: elegir un "
         "departamento vulnerable y hacer foco en él como cierre.")
     return "Mapa por departamento", texto, [fig]
+"""
+seccion_ciclo.py — CÓDIGO PARA PEGAR DENTRO DE visualizaciones.py
+
+CÓMO INSTALARLO (2 pasos):
+
+1. Copiá la función seccion_ciclo() de abajo y pegala en visualizaciones.py,
+   justo ANTES del bloque "ARMADO DEL REPORTE" (donde está PLANTILLA).
+
+2. En main(), agregala a la lista de secciones:
+
+       secciones = [seccion_panorama(), seccion_quintil(),
+                    seccion_quintil_grado(),
+                    seccion_ciclo("estudiantes"),      # <-- NUEVO
+                    seccion_ciclo("docentes"),         # <-- NUEVO
+                    seccion_mapa()]
+
+Requisito: haber corrido antes ciclo_estudiantes.py y ciclo_docentes.py, que
+son los que generan los CSV que esta sección lee.
+
+
+QUÉ GRAFICA Y POR QUÉ
+Tres figuras, en orden de argumento:
+
+  A. PROFUNDIZACIÓN — var_pp con umbral 1 vs umbral 10, por ciclo. Es el mismo
+     hallazgo central del reto (no cae el acceso, cae la intensidad) pero
+     mostrado ciclo por ciclo. Las barras rojas siempre más largas que las
+     grises = el patrón se repite en todos lados, no es un artefacto.
+
+  B. VOLUMEN — cuántos usuarios MENOS alcanzaron uso sostenido. Un % grande
+     sobre 800 alumnos pesa menos que un % moderado sobre 223.000. Esta es la
+     figura que responde "¿dónde poner los recursos?".
+
+     Definición: usuarios_perdidos = n_2026 * (tasa_2025 - tasa_2026) / 100
+     Es decir: cuántos alumnos menos llegaron a >=10 días en 2026 respecto de
+     los que habrían llegado si la tasa de 2025 se hubiera mantenido, usando la
+     matrícula de 2026. Al fijar la matrícula, aísla el cambio de COMPORTAMIENTO
+     del cambio de POBLACIÓN (la misma distinción de metricas_acceso.py).
+
+  C. LAS DOS COSAS JUNTAS — dispersión % de caída vs cantidad de gente, tamaño
+     de burbuja = matrícula. Arriba a la derecha están los casos que importan
+     de verdad (cae mucho Y afecta a muchos). Sirve para mostrar de un golpe
+     que el ranking porcentual solo es engañoso.
+"""
+
+# ============================================================
+# 5. POR CICLO (pegar en visualizaciones.py)
+# ============================================================
+def seccion_ciclo(pob="estudiantes"):
+    """Caída por ciclo: profundización + volumen absoluto de usuarios."""
+    d = pd.read_csv(METRICAS / f"ciclo_{pob}.csv", sep=";", decimal=",")
+    d["ciclo"] = d["ciclo"].str.title()
+
+    u1 = d[d["umbral"] == 1].set_index("ciclo")
+    u10 = d[d["umbral"] == 10].set_index("ciclo")
+
+    # Usuarios que dejaron de usar CREA de forma sostenida, a matrícula 2026.
+    # Fija la población para que el número sea comportamiento, no matrícula.
+    g = pd.DataFrame({
+        "var_pp_1": u1["var_pp"],
+        "var_pp_10": u10["var_pp"],
+        "n_2026": u10["n_2026"],
+        "tasa_2025": u10["tasa_2025"],
+        "tasa_2026": u10["tasa_2026"],
+    }).dropna().reset_index()
+    g["perdidos"] = (g["n_2026"] * (g["tasa_2025"] - g["tasa_2026"]) / 100).round(0)
+    g["caida_rel"] = (100 * (g["tasa_2026"] - g["tasa_2025"]) / g["tasa_2025"]).round(1)
+
+    etiqueta = "alumnos" if pob == "estudiantes" else "docentes"
+
+    # ---- A. profundización: acceso vs uso sostenido ---------------------
+    largo = g.melt(id_vars="ciclo", value_vars=["var_pp_1", "var_pp_10"],
+                   var_name="metrica", value_name="var_pp")
+    largo["metrica"] = largo["metrica"].map({"var_pp_1": "Acceso (≥ 1 día)",
+                                             "var_pp_10": "Uso sostenido (≥ 10 días)"})
+    orden = g.sort_values("var_pp_10")["ciclo"].tolist()
+
+    figA = px.bar(largo, x="var_pp", y="ciclo", color="metrica", barmode="group",
+                  orientation="h", text="var_pp",
+                  category_orders={"ciclo": orden[::-1]},
+                  color_discrete_map={"Acceso (≥ 1 día)": GRIS_25,
+                                      "Uso sostenido (≥ 10 días)": ROJO})
+    figA.update_traces(texttemplate="%{text:.1f}", textposition="outside",
+                       hovertemplate="%{y}<br>%{fullData.name}: %{x:.1f} pp<extra></extra>")
+    estilo(figA, f"5 · La caída por ciclo es de intensidad, no de acceso — {etiqueta.capitalize()}",
+           "Cambio 2025→2026 en pp. La barra roja es casi siempre más larga: el uso sostenido cae más que el acceso.")
+    figA.update_xaxes(title="Cambio 2025 → 2026", ticksuffix=" pp")
+    figA.update_yaxes(title="")
+
+    # ---- B. volumen absoluto -------------------------------------------
+    gv = g.sort_values("perdidos", ascending=False)
+    figB = px.bar(gv, x="ciclo", y="perdidos", text="perdidos",
+                  color_discrete_sequence=[AZUL],
+                  custom_data=["tasa_2025", "tasa_2026", "var_pp_10", "n_2026"])
+    figB.update_traces(texttemplate="%{text:,.0f}", textposition="outside",
+                       hovertemplate="<b>%{x}</b><br>%{customdata[3]:,} " + etiqueta +
+                                     " en 2026<br>Tasa: %{customdata[0]:.1f}% → %{customdata[1]:.1f}%"
+                                     " (%{customdata[2]:.1f} pp)<br><b>%{y:,.0f} " + etiqueta +
+                                     " menos</b> con uso sostenido<extra></extra>")
+    estilo(figB, f"5 · Dónde está el grueso del problema — {etiqueta.capitalize()}",
+           f"{etiqueta.capitalize()} que dejaron de alcanzar 10+ días de uso, a matrícula 2026. "
+           "Un % alto sobre pocos casos pesa poco; esta figura ordena por gente real.")
+    figB.update_yaxes(title=f"{etiqueta.capitalize()} afectados")
+    figB.update_xaxes(title="", tickangle=-35)
+
+    # ---- C. % vs volumen ------------------------------------------------
+    figC = px.scatter(g, x="caida_rel", y="perdidos", size="n_2026", text="ciclo",
+                      size_max=55, color_discrete_sequence=[AZUL],
+                      custom_data=["var_pp_10", "n_2026"])
+    figC.update_traces(textposition="top center", textfont_size=10,
+                       marker=dict(opacity=0.75, line=dict(width=1, color="#fcfcfb")),
+                       hovertemplate="<b>%{text}</b><br>Caída relativa: %{x:.1f}%"
+                                     "<br>%{y:,.0f} " + etiqueta + " afectados"
+                                     "<br>Matrícula 2026: %{customdata[1]:,}<extra></extra>")
+    estilo(figC, "5 · Caída porcentual vs cantidad de gente afectada",
+           "Tamaño = matrícula 2026. Izquierda = cae más en %. Arriba = afecta a más gente. "
+           "Los casos accionables están arriba, no a la izquierda.")
+    figC.update_xaxes(title="Caída relativa del uso sostenido", ticksuffix="%")
+    figC.update_yaxes(title=f"{etiqueta.capitalize()} afectados")
+
+    # ---- texto ----------------------------------------------------------
+    top = g.nlargest(3, "perdidos")
+    peor_rel = g.nsmallest(1, "caida_rel").iloc[0]
+    total = g["perdidos"].sum()
+    concentra = 100 * top["perdidos"].sum() / total
+
+    texto = (
+        f"El corte por ciclo tiene una trampa: el ranking por porcentaje y el ranking por "
+        f"cantidad de gente <b>no coinciden</b>. El ciclo con mayor caída relativa es "
+        f"<b>{peor_rel['ciclo']}</b> ({peor_rel['caida_rel']:.1f}%), pero involucra apenas "
+        f"{peor_rel['perdidos']:,.0f} {etiqueta}. En volumen, el problema está concentrado en "
+        f"<b>{top.iloc[0]['ciclo']}</b> ({top.iloc[0]['perdidos']:,.0f} {etiqueta}), "
+        f"<b>{top.iloc[1]['ciclo']}</b> ({top.iloc[1]['perdidos']:,.0f}) y "
+        f"<b>{top.iloc[2]['ciclo']}</b> ({top.iloc[2]['perdidos']:,.0f}): entre los tres "
+        f"explican el <b>{concentra:.0f}%</b> de los {total:,.0f} {etiqueta} que dejaron de "
+        f"usar CREA de forma sostenida. Las dos lecturas son válidas y responden preguntas "
+        f"distintas: la relativa dice dónde el deterioro fue más severo, la absoluta dice "
+        f"dónde una intervención alcanza a más gente."
+    )
+    return f"Por ciclo — {etiqueta}", texto, [figA, figB, figC]
 
 
 # ============================================================
@@ -332,7 +471,9 @@ PLANTILLA = """<!doctype html>
 
 def main():
     print("Generando reporte único...")
-    secciones = [seccion_panorama(), seccion_quintil(), seccion_quintil_grado(), seccion_mapa()]
+    secciones = [seccion_panorama(), seccion_quintil(), seccion_quintil_grado(), seccion_mapa(),seccion_ciclo("estudiantes"),      # <-- NUEVO
+                    seccion_ciclo("docentes"),]
+    
 
     bloques, primero = [], True
     for titulo, texto, figuras in secciones:
